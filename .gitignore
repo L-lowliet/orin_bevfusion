@@ -1,0 +1,8 @@
+__pycache__
+build/
+devel/
+src/bevfusion/src/Lidar_AI_Solution/CUDA-BEVFusion/model/
+src/bevfusion/src/Lidar_AI_Solution/CUDA-BEVFusion/build/
+src/bevfusion/src/Lidar_AI_Solution/CUDA-BEVFusion/model.zip
+src/bevfusion/src/Lidar_AI_Solution/CUDA-BEVFusion/nuScenes-example-data.zip
+src/bevfusion/src/Lidar_AI_Solution/third_packages

@@ -46,7 +46,7 @@
 #include <sensor_msgs/image_encodings.h>
 #include <opencv2/core/core.hpp>
 #include <opencv2/highgui/highgui.hpp>
-#include "sensor_msgs/PointCloud2.h" // 假设这是激光雷达的消息类型
+#include "sensor_msgs/PointCloud2.h" // 激光雷达的消息类型
 
 #include <pcl_conversions/pcl_conversions.h>
 #include <pcl/point_cloud.h>
@@ -82,53 +82,43 @@ nv::Tensor lidar_point_cloud_tensor;
 typedef unsigned short half;
 static inline half __internal_float2half(const float f)
 {
-      unsigned int x;
-      unsigned int u;
-      unsigned int result;
-      unsigned int sign;
-      unsigned int remainder;
-      (void)memcpy(&x, &f, sizeof(f));
-      u = (x & 0x7fffffffU);
-      sign = ((x >> 16U) & 0x8000U);
-      // NaN/+Inf/-Inf
-      if (u >= 0x7f800000U)
-      {
-          remainder = 0U;
-          result = ((u == 0x7f800000U) ? (sign | 0x7c00U) : 0x7fffU);
-      }
-      else if (u > 0x477fefffU)
-      { // Overflows
-          remainder = 0x80000000U;
-          result = (sign | 0x7bffU);
-      }
-      else if (u >= 0x38800000U)
-      { // Normal numbers
-          remainder = u << 19U;
-          u -= 0x38000000U;
-          result = (sign | (u >> 13U));
-      }
-      else if (u < 0x33000001U)
-      { // +0/-0
-          remainder = u;
-          result = sign;
-      }
-      else
-      { // Denormal numbers
-          const unsigned int exponent = u >> 23U;
-          const unsigned int shift = 0x7eU - exponent;
-          unsigned int mantissa = (u & 0x7fffffU);
-          mantissa |= 0x800000U;
-          remainder = mantissa << (32U - shift);
-          result = (sign | (mantissa >> shift));
-          result &= 0x0000FFFFU;
-      }
+  unsigned int x;
+  unsigned int u;
+  unsigned int result;
+  unsigned int sign;
+  unsigned int remainder;
+  (void)memcpy(&x, &f, sizeof(f));
+  u = (x & 0x7fffffffU);
+  sign = ((x >> 16U) & 0x8000U);
   
-      unsigned short x_tmp = static_cast<unsigned short>(result);
-      if ((remainder > 0x80000000U) || ((remainder == 0x80000000U) && ((x & 0x1U) != 0U)))
-      {
-          x_tmp++;
-      }
-    return x_tmp;
+  if (u >= 0x7f800000U) {
+      remainder = 0U;
+      result = ((u == 0x7f800000U) ? (sign | 0x7c00U) : 0x7fffU);
+  } else if (u > 0x477fefffU) {
+      remainder = 0x80000000U;
+      result = (sign | 0x7bffU);
+  } else if (u >= 0x38800000U) {
+      remainder = u << 19U;
+      u -= 0x38000000U;
+      result = (sign | (u >> 13U));
+  } else if (u < 0x33000001U) {
+      remainder = u;
+      result = sign;
+  } else {
+      const unsigned int exponent = u >> 23U;
+      const unsigned int shift = 0x7eU - exponent;
+      unsigned int mantissa = (u & 0x7fffffU);
+      mantissa |= 0x800000U;
+      remainder = mantissa << (32U - shift);
+      result = (sign | (mantissa >> shift));
+      result &= 0x0000FFFFU;
+  }
+
+  unsigned short x_tmp = static_cast<unsigned short>(result);
+  if ((remainder > 0x80000000U) || ((remainder == 0x80000000U) && ((x & 0x1U) != 0U))) {
+      x_tmp++;
+  }
+  return x_tmp;
 }
 
 
@@ -346,20 +336,74 @@ void TestSample(){
 
   // Load image and lidar to host
   auto images = load_images(data);
-  auto lidar_points = nv::Tensor::load(nv::format("%s/points.tensor", data), false);
-  
+
+
+  // auto lidar_points = nv::Tensor::load(nv::format("%s/points.tensor", data), false);
+  // lidar_points.print("lidar_point_cloud_tensor", 0, 5, 100);
   // run  lidar_point_cloud_tensor
   auto bboxes =
-      core->forward((const unsigned char**)images.data(), lidar_points.ptr<nvtype::half>(), lidar_points.size(0), stream);
+      core->forward((const unsigned char**)images.data(), lidar_point_cloud_tensor.ptr<nvtype::half>(), lidar_point_cloud_tensor.size(0), stream);
 
   //输出框的信息
   Boxes2Txt(bboxes, "/home/orin_uestc_1/bevformer_ws/src/bevfusion/src/Lidar_AI_Solution/CUDA-BEVFusion/result/1.txt", false);
   // visualize and save to jpg
-  visualize(bboxes, lidar_points, images, lidar2image, "/home/orin_uestc_1/bevformer_ws/src/bevfusion/src/Lidar_AI_Solution/CUDA-BEVFusion/build/cuda-bevfusion.jpg", stream);
+  // visualize(bboxes, lidar_point_cloud_tensor, images, lidar2image, "/home/orin_uestc_1/bevformer_ws/src/bevfusion/src/Lidar_AI_Solution/CUDA-BEVFusion/build/cuda-bevfusion.jpg", stream);
 
   // destroy memory
   free_images(images);
   // checkRuntime(cudaStreamDestroy(stream));
+
+  // marker 
+  if(bboxes.empty()){
+    printf("lidarbox = 0  \n");
+
+  }else{
+    for (size_t i = 0; i < bboxes.size(); ++i) {
+      if(bboxes[i].score > 0.2 && bboxes[i].id == 8){
+        marker.header.frame_id = "rslidar"; // 设置Marker的坐标系
+
+        marker.header.stamp = ros::Time::now();
+        marker.ns = "basic_shapes";
+        marker.id = i;
+        marker.lifetime = ros::Duration(0.5);
+        marker.type = visualization_msgs::Marker::CUBE; // 设置Marker类型为立方体
+        marker.action = visualization_msgs::Marker::ADD;
+
+        // 设置长方体的尺寸
+        marker.scale.x = bboxes[i].size.l; // 长
+        marker.scale.y = bboxes[i].size.w; // 宽
+        marker.scale.z = bboxes[i].size.h; // 高
+
+        // 设置Marker的颜色
+        marker.color.r = 0.0f;
+        marker.color.g = 1.0f;
+        marker.color.b = 0.0f;
+        marker.color.a = 0.5; // 半透明
+
+        marker.pose.position.x = bboxes[i].position.x; // 设置长方体的位置
+        marker.pose.position.y = bboxes[i].position.y;
+        marker.pose.position.z = 0.4 + bboxes[i].position.z;
+
+        marker.pose.orientation.x = 0.0;
+        marker.pose.orientation.y = 0.0;
+        marker.pose.orientation.z = 0.0;
+        marker.pose.orientation.w = 1.0;
+        
+        marker_array.markers.push_back(marker); // 将标记添加到MarkerArray中
+
+      }else{
+        // pub.publish(empty_marker_array); // 发布消息到话题上
+      }
+    }
+
+  }
+  pub.publish(marker_array); // 发布消息到话题上
+  marker_array.markers.clear();
+  bboxes.clear();
+ 
+
+
+
 
 }
 
@@ -383,8 +427,9 @@ void imageCb(const sensor_msgs::ImageConstPtr& msg)
   cv::Size targetSize(1600, 900);
   cv::resize(zed_image_copy, zed_image, targetSize, cv::INTER_LINEAR); // 可以选择不同的插值方法
   
-  cv::imshow("zed_image", zed_image_copy);
-  cv::waitKey(1);
+  // cv::imshow("zed_image", zed_image_copy);
+  // cv::waitKey(1);
+  cv::imwrite("/home/orin_uestc_1/bevformer_ws/src/bevfusion/src/Lidar_AI_Solution/CUDA-BEVFusion/example-data/0-FRONT.jpg", zed_image);
 
   TestSample();
 }
@@ -394,18 +439,37 @@ void lidarCb(const sensor_msgs::PointCloud2::ConstPtr& msg)
   pcl::PointCloud<pcl::PointXYZI>::Ptr ROI_cloud(new pcl::PointCloud<pcl::PointXYZI>);
   pcl::fromROSMsg(*msg, *ROI_cloud);
   std::cout << "ROI_cloud->points.size()   " << ROI_cloud->points.size() << std::endl;
-  half *points = new half[ROI_cloud->points.size() * 5];
-  for (int i = 0; i < ROI_cloud->points.size(); i++)
+
+  int last_j = 0;
+  for (int i = 0, j = 0; i < ROI_cloud->points.size(); i++)
   {
-      points[i * 5 + 0] = __internal_float2half(ROI_cloud->points[i].x);
-      points[i * 5 + 1] = __internal_float2half(ROI_cloud->points[i].y);
-      points[i * 5 + 2] = __internal_float2half(ROI_cloud->points[i].z);
-      points[i * 5 + 3] = __internal_float2half(1);
-      points[i * 5 + 4] = __internal_float2half(0);
+    if(std::isnan(ROI_cloud->points[i].x) || std::isnan(ROI_cloud->points[i].y) || std::isnan(ROI_cloud->points[i].z)){
+
+    }else{
+      j++;
+    }
+    last_j = j;
   }
-  std::vector<int32_t> shape{ROI_cloud->points.size(), 5};
+  printf(" last_j = %d \n", last_j);
+  half *points = new half[last_j * 5];
+  for (int i = 0, j = 0; i < ROI_cloud->points.size(); i++)
+  {
+    if(std::isnan(ROI_cloud->points[i].x) || std::isnan(ROI_cloud->points[i].y) || std::isnan(ROI_cloud->points[i].z)){
+      
+    }else{
+      points[j * 5 + 0] = __internal_float2half(ROI_cloud->points[i].x);
+      points[j * 5 + 1] = __internal_float2half(ROI_cloud->points[i].y);
+      points[j * 5 + 2] = __internal_float2half(ROI_cloud->points[i].z);
+      points[j * 5 + 3] = __internal_float2half(ROI_cloud->points[i].intensity);
+      points[j * 5 + 4] = __internal_float2half(0);
+      j++;
+    }
+  }
+
+  std::vector<int32_t> shape{last_j, 5};
   // Tensor Tensor::from_data_reference(void *data, vector<int32_t> shape, DataType dtype, bool device)
   lidar_point_cloud_tensor = nv::Tensor::from_data_reference(points, shape, nv::DataType::Float16, false);
+  // lidar_point_cloud_tensor.print("lidar_point_cloud_tensor", 0, 5, last_j);
 }
 
 
@@ -436,9 +500,9 @@ int main(int argc, char** argv) {
   camera_intrinsics = nv::Tensor::load(nv::format("%s/camera_intrinsics.tensor", data), false);
   lidar2image = nv::Tensor::load(nv::format("%s/lidar2image.tensor", data), false);
   img_aug_matrix = nv::Tensor::load(nv::format("%s/img_aug_matrix.tensor", data), false);
-  // printf("tensor info - >\n");
-  // camera2lidar.print("Tensor", 0, 4, 6*4);
-  // printf("\n");
+  printf("tensor info - >\n");
+  camera2lidar.print("Tensor", 0, 4, 4);
+  printf("\n");
 
   // float data_1[96] = {
   //     0.99993889, 0.00386537, 0.00707301, 0.01224191,
@@ -449,12 +513,12 @@ int main(int argc, char** argv) {
   // void * data_2 = data_1;
   // std::vector<int64_t> shape = {1, 6, 4, 4};
   // lidar2image = nv::Tensor::from_data_reference((void *)data_2, shape, nv::DataType::Float32, false);
-  // lidar2image.print("Tensor", 0, 4, 6*4);
-  // printf("\n");  
-  // // camera_intrinsics.print("Tensor", 0, 4, 6*4);
-  // // printf("\n");
-  // // img_aug_matrix.print("Tensor", 0, 4, 6*4);
-  // printf("tensor info end.\n");
+  camera_intrinsics.print("Tensor", 0, 4, 4);
+  printf("\n");
+  lidar2image.print("Tensor", 0, 4, 4);
+  printf("\n");  
+  img_aug_matrix.print("Tensor", 0, 4, 4);
+  printf("tensor info end.\n");
 
   // 初始化 ROS 节点
   ros::init(argc, argv, "image_subscriber");
@@ -468,7 +532,7 @@ int main(int argc, char** argv) {
   ros::Rate loop_rate(20); // 发布频率为10Hz
   // 创建订阅器，订阅图像消息
   image_sub_ = it.subscribe("/zed2i/zed_node/rgb/image_rect_color", 1, &imageCb);
-  lidar_sub_ = nh.subscribe<sensor_msgs::PointCloud2>("rslidar_points", 5, &lidarCb);
+  lidar_sub_ = nh.subscribe<sensor_msgs::PointCloud2>("rslidar_points", 1, &lidarCb);
 
   // 进入 ROS 循环
   ros::spin();

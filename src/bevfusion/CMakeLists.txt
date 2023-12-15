@@ -9,10 +9,16 @@ set(arch ${CMAKE_HOST_SYSTEM_PROCESSOR})
 find_package(CUDA REQUIRED)
 find_package(Protobuf REQUIRED)
 
-set(CMAKE_CXX_FLAGS_RELEASE "-std=c++14 -Wextra -Wall -Wno-missing-field-initializers -Wno-deprecated-declarations -O3 -DENABLE_TEXT_BACKEND_STB")
+# set(CMAKE_CXX_FLAGS_RELEASE "-std=c++14 -Wextra -Wall -Wno-missing-field-initializers -Wno-deprecated-declarations -O3 -DENABLE_TEXT_BACKEND_STB")
+# set(CMAKE_CXX_FLAGS_DEBUG   "-std=c++14 -O0 -g -DENABLE_TEXT_BACKEND_STB")
+
+# set(CUDA_NVCC_FLAGS_RELEASE "-Werror=all-warnings -Xcompiler -std=c++14,-Wextra,-Wall,-Wno-deprecated-declarations,-O3 -DENABLE_TEXT_BACKEND_STB")
+# set(CUDA_NVCC_FLAGS_DEBUG   "-std=c++14 -O0 -g -DENABLE_TEXT_BACKEND_STB")
+
+set(CMAKE_CXX_FLAGS_RELEASE "-std=c++14 -Wno-missing-field-initializers -Wno-deprecated-declarations -O3 -DENABLE_TEXT_BACKEND_STB")
 set(CMAKE_CXX_FLAGS_DEBUG   "-std=c++14 -O0 -g -DENABLE_TEXT_BACKEND_STB")
 
-set(CUDA_NVCC_FLAGS_RELEASE "-Werror=all-warnings -Xcompiler -std=c++14,-Wextra,-Wall,-Wno-deprecated-declarations,-O3 -DENABLE_TEXT_BACKEND_STB")
+set(CUDA_NVCC_FLAGS_RELEASE "-Xcompiler -std=c++14,-Wno-deprecated-declarations,-O3 -DENABLE_TEXT_BACKEND_STB")
 set(CUDA_NVCC_FLAGS_DEBUG   "-std=c++14 -O0 -g -DENABLE_TEXT_BACKEND_STB")
 
 set(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS} 
@@ -38,12 +44,12 @@ catkin_package(
   CATKIN_DEPENDS roscpp message_runtime
 )
 
-# # 添加PCL的依赖
-# find_package(PCL REQUIRED)
+# 添加PCL的依赖
+find_package(PCL REQUIRED)
 
 include_directories(
   ${catkin_INCLUDE_DIRS}
-  # ${PCL_INCLUDE_DIRS}
+  ${PCL_INCLUDE_DIRS}
 )
 
 
@@ -120,7 +126,7 @@ target_link_libraries(bevfusion
   ${Protobuf_LIBRARIES}
   libnvinfer_plugin.so
   ${catkin_LIBRARIES}
-  # ${PCL_LIBRARIES}
+  ${PCL_LIBRARIES}
 )
 #######################################################################
 
@@ -138,7 +144,6 @@ if(${CMAKE_BUILD_PYTHON} STREQUAL "ON")
     ${Protobuf_LIBRARIES}
     libnvinfer_plugin.so
     libpython3.8.so
-    # /usr/lib/aarch64-linux-gnu/libstdc++.so.6
   )
 endif()
 #######################################################################

@@ -30,14 +30,20 @@ find_package(catkin REQUIRED COMPONENTS
   std_msgs
   geometry_msgs
   message_generation  # 确保包含消息生成的依赖
+  pcl_conversions
+  pcl_ros
 )
 
 catkin_package(
   CATKIN_DEPENDS roscpp message_runtime
 )
 
+# # 添加PCL的依赖
+# find_package(PCL REQUIRED)
+
 include_directories(
   ${catkin_INCLUDE_DIRS}
+  # ${PCL_INCLUDE_DIRS}
 )
 
 
@@ -114,6 +120,7 @@ target_link_libraries(bevfusion
   ${Protobuf_LIBRARIES}
   libnvinfer_plugin.so
   ${catkin_LIBRARIES}
+  # ${PCL_LIBRARIES}
 )
 #######################################################################
 

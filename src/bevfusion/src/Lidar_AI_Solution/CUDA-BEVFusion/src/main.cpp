@@ -359,13 +359,13 @@ void TestSample(){
 
   }else{
     for (size_t i = 0; i < bboxes.size(); ++i) {
-      if(bboxes[i].score > 0.2 && bboxes[i].id == 8){
+      if(bboxes[i].score > 0.15 && bboxes[i].id == 8){
         marker.header.frame_id = "rslidar"; // 设置Marker的坐标系
 
         marker.header.stamp = ros::Time::now();
         marker.ns = "basic_shapes";
         marker.id = i;
-        marker.lifetime = ros::Duration(0.5);
+        marker.lifetime = ros::Duration(1);
         marker.type = visualization_msgs::Marker::CUBE; // 设置Marker类型为立方体
         marker.action = visualization_msgs::Marker::ADD;
 
@@ -382,7 +382,7 @@ void TestSample(){
 
         marker.pose.position.x = bboxes[i].position.x; // 设置长方体的位置
         marker.pose.position.y = bboxes[i].position.y;
-        marker.pose.position.z = 0.4 + bboxes[i].position.z;
+        marker.pose.position.z = bboxes[i].position.z;
 
         marker.pose.orientation.x = 0.0;
         marker.pose.orientation.y = 0.0;
@@ -427,8 +427,8 @@ void imageCb(const sensor_msgs::ImageConstPtr& msg)
   cv::Size targetSize(1600, 900);
   cv::resize(zed_image_copy, zed_image, targetSize, cv::INTER_LINEAR); // 可以选择不同的插值方法
   
-  // cv::imshow("zed_image", zed_image_copy);
-  // cv::waitKey(1);
+  cv::imshow("zed_image", zed_image_copy);
+  cv::waitKey(1);
   cv::imwrite("/home/orin_uestc_1/bevformer_ws/src/bevfusion/src/Lidar_AI_Solution/CUDA-BEVFusion/example-data/0-FRONT.jpg", zed_image);
 
   TestSample();

@@ -46,8 +46,11 @@
 #include <sensor_msgs/image_encodings.h>
 #include <opencv2/core/core.hpp>
 #include <opencv2/highgui/highgui.hpp>
+#include <opencv2/imgproc/imgproc.hpp>
 #include "sensor_msgs/PointCloud2.h" // 激光雷达的消息类型
-
+#include <message_filters/subscriber.h>
+#include <message_filters/time_synchronizer.h>
+#include <message_filters/sync_policies/approximate_time.h>
 #include <pcl_conversions/pcl_conversions.h>
 #include <pcl/point_cloud.h>
 #include <pcl/point_types.h>
@@ -407,7 +410,40 @@ void TestSample(){
 
 }
 
+int index_i = 0;
+void image_save(const sensor_msgs::ImageConstPtr& msg)
+{
+  cv_bridge::CvImagePtr cv_ptr;
+  try
+  {
+    cv_ptr = cv_bridge::toCvCopy(msg, sensor_msgs::image_encodings::BGR8);
+  }
+  catch (cv_bridge::Exception& e)
+  {
+    ROS_ERROR("cv_bridge exception: %s", e.what());
+    return;
+  }    
+  cv::Mat zed_image_copy;
+  cv_ptr->image.copyTo(zed_image_copy);
+  cv::Size targetSize(1224, 370);
+  cv::resize(zed_image_copy, zed_image, targetSize, cv::INTER_LINEAR); // 可以选择不同的插值方法
+  cv::imshow("zed_image", zed_image);
+  cv::waitKey(1);
+  cv::imwrite("/home/orin_uestc_1/zhuohui/data/kitti/image/" + std::to_string(index_i) + ".png", zed_image);
+}
 
+
+void lidar_save(const sensor_msgs::PointCloud2::ConstPtr& msg)
+{
+  pcl::PointCloud<pcl::PointXYZI>::Ptr ROI_cloud(new pcl::PointCloud<pcl::PointXYZI>);
+  pcl::fromROSMsg(*msg, *ROI_cloud);
+  // 保存为PCD文件
+  pcl::io::savePCDFileASCII("/home/orin_uestc_1/zhuohui/data/kitti/lidar/pcd/"+ std::to_string(index_i) + ".pcd", *ROI_cloud);
+  // 保存为BIN文件
+  std::ofstream bin_file("/home/orin_uestc_1/zhuohui/data/kitti/lidar/bin/"+ std::to_string(index_i) + ".bin", std::ios::binary);
+  bin_file.write(reinterpret_cast<const char*>(&ROI_cloud->points[0]), ROI_cloud->points.size() * sizeof(pcl::PointXYZI));
+  bin_file.close();
+}
 
 
 void imageCb(const sensor_msgs::ImageConstPtr& msg)
@@ -473,6 +509,19 @@ void lidarCb(const sensor_msgs::PointCloud2::ConstPtr& msg)
 }
 
 
+void callback(const sensor_msgs::ImageConstPtr& image_msg, const sensor_msgs::PointCloud2ConstPtr& lidar_msg)
+{
+  // 输出相机图像的时间戳和激光雷达数据的时间戳
+  ROS_INFO("=======================================");
+  ROS_INFO("Camera timestamp: %f", image_msg->header.stamp.toSec());
+  ROS_INFO("Lidar timestamp: %f", lidar_msg->header.stamp.toSec());
+  // 在这里添加你的处理逻辑，根据需求操作相机和激光雷达数据
+  image_save(image_msg);
+  lidar_save(lidar_msg);
+  index_i = index_i + 1;
+}
+
+
 int main(int argc, char** argv) {
 
   data      = "/home/orin_uestc_1/bevformer_ws/src/bevfusion/src/Lidar_AI_Solution/CUDA-BEVFusion/example-data";
@@ -500,9 +549,9 @@ int main(int argc, char** argv) {
   camera_intrinsics = nv::Tensor::load(nv::format("%s/camera_intrinsics.tensor", data), false);
   lidar2image = nv::Tensor::load(nv::format("%s/lidar2image.tensor", data), false);
   img_aug_matrix = nv::Tensor::load(nv::format("%s/img_aug_matrix.tensor", data), false);
-  printf("tensor info - >\n");
-  camera2lidar.print("Tensor", 0, 4, 4);
-  printf("\n");
+  // printf("tensor info - >\n");
+  // camera2lidar.print("Tensor", 0, 4, 4);
+  // printf("\n");
 
   // float data_1[96] = {
   //     0.99993889, 0.00386537, 0.00707301, 0.01224191,
@@ -513,30 +562,111 @@ int main(int argc, char** argv) {
   // void * data_2 = data_1;
   // std::vector<int64_t> shape = {1, 6, 4, 4};
   // lidar2image = nv::Tensor::from_data_reference((void *)data_2, shape, nv::DataType::Float32, false);
-  camera_intrinsics.print("Tensor", 0, 4, 4);
-  printf("\n");
-  lidar2image.print("Tensor", 0, 4, 4);
-  printf("\n");  
-  img_aug_matrix.print("Tensor", 0, 4, 4);
-  printf("tensor info end.\n");
+  // camera_intrinsics.print("Tensor", 0, 4, 4);
+  // printf("\n");
+  // lidar2image.print("Tensor", 0, 4, 4);
+  // printf("\n");  
+  // img_aug_matrix.print("Tensor", 0, 4, 4);
+  // printf("tensor info end.\n");
 
   // 初始化 ROS 节点
-  ros::init(argc, argv, "image_subscriber");
+  ros::init(argc, argv, "data_synchronizer");
 
   // 创建 ROS 句柄
   ros::NodeHandle nh;
-  image_transport::Subscriber image_sub_;
-  ros::Subscriber lidar_sub_;
+  // image_transport::Subscriber image_sub_;
+  // ros::Subscriber lidar_sub_;
   image_transport::ImageTransport it(nh);
   pub = nh.advertise<visualization_msgs::MarkerArray>("markerarray_topic", 10); // 定义发布器
-  ros::Rate loop_rate(20); // 发布频率为10Hz
-  // 创建订阅器，订阅图像消息
-  image_sub_ = it.subscribe("/zed2i/zed_node/rgb/image_rect_color", 1, &imageCb);
-  lidar_sub_ = nh.subscribe<sensor_msgs::PointCloud2>("rslidar_points", 1, &lidarCb);
+  ros::Rate loop_rate(20); // 发布频率为20Hz
+  //**********
+  // // 创建订阅器，订阅图像消息
+  // image_sub_ = it.subscribe("/zed2i/zed_node/left_raw/image_raw_color", 1, &imageCb);
+  // lidar_sub_ = nh.subscribe<sensor_msgs::PointCloud2>("rslidar_points", 1, &lidarCb);
+  //**********
+  message_filters::Subscriber<sensor_msgs::Image> image_sub(nh, "/zed2i/zed_node/left_raw/image_raw_color", 1);
+  message_filters::Subscriber<sensor_msgs::PointCloud2> lidar_sub(nh, "rslidar_points", 1);
 
+
+  
+  // 定义时间同步器，同步图像和激光雷达数据
+  typedef message_filters::sync_policies::ApproximateTime<sensor_msgs::Image, sensor_msgs::PointCloud2> SyncPolicy;
+  message_filters::Synchronizer<SyncPolicy> sync(SyncPolicy(10), image_sub, lidar_sub);
+  sync.registerCallback(boost::bind(&callback, _1, _2));
   // 进入 ROS 循环
   ros::spin();
 
   return 0;
 
 }
+
+
+/* 改变topic频率， 改变图像size， 标定camera+imu使用
+image_transport::Publisher left_pub;
+image_transport::Publisher right_pub;
+
+void imageCallback(const sensor_msgs::ImageConstPtr& left_image, const sensor_msgs::ImageConstPtr& right_image)
+{
+    // Convert ROS image messages to OpenCV format
+    cv_bridge::CvImagePtr left_cv_ptr, right_cv_ptr;
+
+    try
+    {
+        left_cv_ptr = cv_bridge::toCvCopy(left_image, sensor_msgs::image_encodings::BGR8);
+        right_cv_ptr = cv_bridge::toCvCopy(right_image, sensor_msgs::image_encodings::BGR8);
+    }
+    catch (cv_bridge::Exception& e)
+    {
+        ROS_ERROR("cv_bridge exception: %s", e.what());
+        return;
+    }
+
+    // Resize left image
+    cv::Mat resized_left_image;
+    cv::resize(left_cv_ptr->image, resized_left_image, cv::Size(1224, 370));
+
+    // Resize right image
+    cv::Mat resized_right_image;
+    cv::resize(right_cv_ptr->image, resized_right_image, cv::Size(1224, 370));
+
+    // Publish resized images
+    left_cv_ptr->image = resized_left_image;
+    right_cv_ptr->image = resized_right_image;
+    cv::imshow("zed_image", resized_left_image);
+    cv::waitKey(1);
+    left_pub.publish(left_cv_ptr->toImageMsg());
+    right_pub.publish(right_cv_ptr->toImageMsg());
+}
+
+int main(int argc, char** argv)
+{
+    ros::init(argc, argv, "stereo_image_resizer");
+    ros::NodeHandle nh;
+    image_transport::ImageTransport it(nh);
+
+    // Subscribe to stereo image topics
+    message_filters::Subscriber<sensor_msgs::Image> left_sub(nh, "/zed2i/zed_node/left_raw/image_raw_color", 1);
+    message_filters::Subscriber<sensor_msgs::Image> right_sub(nh, "/zed2i/zed_node/right_raw/image_raw_color", 1);
+
+    // Advertise resized image topics
+    left_pub = it.advertise("/left/image_raw", 1);
+    right_pub = it.advertise("/right/image_raw", 1);
+
+    // 定义时间同步器，同步图像
+    typedef message_filters::sync_policies::ApproximateTime<sensor_msgs::Image, sensor_msgs::Image> SyncPolicy;
+    message_filters::Synchronizer<SyncPolicy> sync(SyncPolicy(10), left_sub, right_sub);
+    sync.registerCallback(boost::bind(&imageCallback, _1, _2));
+    // 设置发布频率为4Hz
+    ros::Rate loop_rate(20);
+
+    while (ros::ok()) {
+        ros::spinOnce();
+
+        // 在这里添加其他处理逻辑
+
+        loop_rate.sleep();
+    }
+    return 0;
+}
+
+*/

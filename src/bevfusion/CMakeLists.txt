@@ -38,6 +38,7 @@ find_package(catkin REQUIRED COMPONENTS
   message_generation  # 确保包含消息生成的依赖
   pcl_conversions
   pcl_ros
+  message_filters
 )
 
 catkin_package(
@@ -50,6 +51,7 @@ find_package(PCL REQUIRED)
 include_directories(
   ${catkin_INCLUDE_DIRS}
   ${PCL_INCLUDE_DIRS}
+  ${message_filters_INCLUDE_DIRS}  # 添加这一行
 )
 
 
@@ -127,6 +129,7 @@ target_link_libraries(bevfusion
   libnvinfer_plugin.so
   ${catkin_LIBRARIES}
   ${PCL_LIBRARIES}
+  ${message_filters_INCLUDE_DIRS}  # 添加这一行
 )
 #######################################################################
 
